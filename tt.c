@@ -77,6 +77,26 @@ void tt_new_search(void) {
     current_generation++;
 }
 
+#define TT_HASHFULL_SAMPLE_CLUSTERS 1000
+
+int tt_hashfull(void) {
+    if (!table || table_clusters == 0)
+        return 0;
+
+    size_t sample_clusters = table_clusters < TT_HASHFULL_SAMPLE_CLUSTERS ? table_clusters : TT_HASHFULL_SAMPLE_CLUSTERS;
+    size_t used = 0;
+    for (size_t i = 0; i < sample_clusters; i++) {
+        const TTCluster* c = &table[i];
+        for (int j = 0; j < TT_CLUSTER_SIZE; j++) {
+            if (c->entry[j].used && c->entry[j].generation == current_generation)
+                used++;
+        }
+    }
+
+    size_t total_slots = sample_clusters * TT_CLUSTER_SIZE;
+    return (int)(used * 1000 / total_slots);
+}
+
 static TTCluster* tt_cluster_for(uint64_t key) {
     if (!table)
         return NULL;

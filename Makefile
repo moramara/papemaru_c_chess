@@ -11,7 +11,8 @@ SRCS	=	\
 	movegen.c	\
 	perft.c	\
 	eval.c	\
-	search.c
+	search.c	\
+	timemanager.c
 
 PROGRAM	= PapemaruCChess
 

@@ -3,10 +3,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 #include <time.h>
 
 #include "eval.h"
 #include "tt.h"
+#include "timemanager.h"
 
 #define INF 1000000
 #define MATE 50000
@@ -15,26 +17,23 @@
 
 #define MAX_PLY 256
 
-static long long time_limit_ms = -1;
-static long long search_start_ms = 0;
-static long long node_count = 0;
+static TimeManager tmgr;
+_Atomic int ponder_hit_flag = 0;
 
-#define TIME_CHECK_INTERVAL 2048
-
-static long long now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
+/* Triangular PV table built directly by the search, independent of the TT.
+ * pv_length[ply] holds the length of the PV rooted at `ply`; the moves
+ * themselves live at pv_table[ply][ply .. pv_length[ply]-1]. This is only
+ * populated inside PV nodes (full alpha-beta window), matching the classic
+ * PVS convention: scout (null-window) nodes never touch it. */
+static Move pv_table[MAX_PLY][MAX_PLY];
+static int pv_length[MAX_PLY];
 
 static void check_time(void) {
-    if (time_limit_ms < 0)
-        return;
-    node_count++;
-    if ((node_count & (TIME_CHECK_INTERVAL - 1)) != 0)
-        return;
-    if (now_ms() - search_start_ms >= time_limit_ms)
-        stop_flag = 1;
+    if (atomic_exchange_explicit(&ponder_hit_flag, 0, memory_order_acq_rel))
+        tm_ponderhit(&tmgr);
+    tm_tick(&tmgr);
+    if (tm_hard_expired(&tmgr) || tm_node_limit_reached(&tmgr))
+        atomic_store_explicit(&stop_flag, 1, memory_order_relaxed);
 }
 
 static const int mg_pawn_pst[64] = {
@@ -487,7 +486,7 @@ static void order_moves(Board* b, Move* list, int n, const Move* tt_move, int pl
 
 static int quiescence(Board* b, int alpha, int beta, int check_ext, int ply) {
     check_time();
-    if (stop_flag)
+    if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
         return 0;
 
     int in_check = (check_ext < MAX_CHECK_EXT) && is_in_check(b, b->side);
@@ -588,7 +587,9 @@ static const int lmp_move_threshold[LMP_MAX_DEPTH + 1] = {0, 6, 10, 16};
 
 static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_null, Move prev_move) {
     check_time();
-    if (stop_flag)
+    if (ply >= 0 && ply < MAX_PLY)
+        pv_length[ply] = ply;
+    if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
         return 0;
     if (depth == 0)
         return quiescence(b, alpha, beta, 0, ply);
@@ -622,7 +623,7 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
         make_null_move(b, &nu);
         int null_score = -negamax(b, depth - 1 - R, -beta, -beta + 1, ply + 1, 0, NO_MOVE);
         unmake_null_move(b, &nu);
-        if (!stop_flag && null_score >= beta)
+        if (!atomic_load_explicit(&stop_flag, memory_order_relaxed) && null_score >= beta)
             return beta;
     }
 
@@ -689,8 +690,16 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
             best = score;
             best_move = list[i];
         }
-        if (score > alpha)
+        if (score > alpha) {
             alpha = score;
+            if (is_pv_node && ply >= 0 && ply + 1 < MAX_PLY) {
+                pv_table[ply][ply] = mv;
+                int child_len = pv_length[ply + 1];
+                for (int j = ply + 1; j < child_len && j < MAX_PLY; j++)
+                    pv_table[ply][j] = pv_table[ply + 1][j];
+                pv_length[ply] = child_len;
+            }
+        }
         if (alpha >= beta) {
             if (is_quiet)
                 on_quiet_cutoff(b, prev_move, mv, depth, ply);
@@ -703,7 +712,7 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
         return 0;
     }
 
-    if (!stop_flag) {
+    if (!atomic_load_explicit(&stop_flag, memory_order_relaxed)) {
         TTFlag flag;
         if (best <= alpha_orig)
             flag = TT_UPPERBOUND;
@@ -717,15 +726,125 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
     return best;
 }
 
-Move search_root(Board* b, int depth, int movetime_ms) {
-    node_count = 0;
-    search_start_ms = now_ms();
-    time_limit_ms = (movetime_ms > 0) ? movetime_ms : -1;
+static void move_to_uci_string(Move m, char* buf) {
+    buf[0] = 'a' + (m.from % 8);
+    buf[1] = '1' + (m.from / 8);
+    buf[2] = 'a' + (m.to % 8);
+    buf[3] = '1' + (m.to / 8);
+    int len = 4;
+    if (m.promo) {
+        char c = 'q';
+        if (m.promo == WN) c = 'n';
+        else if (m.promo == WB) c = 'b';
+        else if (m.promo == WR) c = 'r';
+        buf[len++] = c;
+    }
+    buf[len] = '\0';
+}
+
+
+static int root_move_allowed(const SearchLimits* limits, Move m) {
+    if (limits->searchmove_count <= 0)
+        return 1;
+    for (int i = 0; i < limits->searchmove_count; i++)
+        if (same_move(limits->searchmoves[i], m))
+            return 1;
+    return 0;
+}
+
+/* Root PV, assembled directly from the search's own triangular pv_table
+ * (see negamax) rather than by walking the TT after the fact. Walking the TT
+ * is unreliable once entries get overwritten by other branches of the same
+ * search or a later iteration, so the search now hands the PV up explicitly. */
+static Move root_pv[MAX_PLY];
+static int root_pv_len;
+
+static void build_root_pv(Move best_move) {
+    root_pv_len = 0;
+    root_pv[root_pv_len++] = best_move;
+    for (int j = 1; j < pv_length[1] && root_pv_len < MAX_PLY; j++)
+        root_pv[root_pv_len++] = pv_table[1][j];
+}
+
+/* Returns a signed mate distance in plies from the side-to-move's
+ * perspective: >0 means "we deliver mate in N", <0 means "we get mated in
+ * N", 0 means the score is not a mate score. */
+static int mate_distance_from_score(int score) {
+    if (score >= MATE - 1000)
+        return (MATE - score + 1) / 2;
+    if (score <= -MATE + 1000)
+        return -((MATE + score + 1) / 2);
+    return 0;
+}
+
+static void print_search_info(int depth, int score) {
+    long long elapsed = tm_elapsed_ms(&tmgr);
+    long long nps = elapsed > 0 ? (long long)(tm_nodes(&tmgr) * 1000ULL / (uint64_t)elapsed) : 0;
+    printf("info depth %d seldepth %d score ", depth, depth);
+    int mate = mate_distance_from_score(score);
+    if (mate != 0) {
+        printf("mate %d", mate);
+    } else {
+        printf("cp %d", score);
+    }
+    printf(" nodes %llu time %lld nps %lld", (unsigned long long)tm_nodes(&tmgr), elapsed, nps);
+    printf(" hashfull %d", tt_hashfull());
+
+    if (root_pv_len > 0) {
+        char ms[8];
+        printf(" pv");
+        for (int i = 0; i < root_pv_len; i++) {
+            move_to_uci_string(root_pv[i], ms);
+            printf(" %s", ms);
+        }
+    }
+    printf("\n");
+
+    /* Diagnostic channel for the statistics this patch adds: root bestmove
+     * stability, quantitative score volatility, per-depth timing / EBF /
+     * predicted next-iteration cost, fail-high/low activity, and aspiration
+     * re-search overhead. Sent as `info string` so any standard UCI GUI can
+     * simply ignore it. */
+    printf("info string timemgr changes %d stability %d volatility_ewma %.1f volatility_sd %.1f"
+           " ebf %.2f predicted_next_ms %lld fail_high %d fail_low %d"
+           " aspiration_researches %d aspiration_research_ms %lld tactical %d"
+           " soft_ms %lld hard_ms %lld\n",
+           tm_bestmove_change_count(&tmgr), tm_stability_streak(&tmgr),
+           tm_score_volatility_ewma(&tmgr), tm_score_volatility_stddev(&tmgr),
+           tm_ebf(&tmgr), (long long)tm_predicted_next_iteration_ms(&tmgr),
+           tm_fail_high_total(&tmgr), tm_fail_low_total(&tmgr),
+           tm_aspiration_research_count(&tmgr), (long long)tm_aspiration_research_ms_total(&tmgr),
+           tm_is_tactical_root(&tmgr), (long long)tm_soft_limit(&tmgr), (long long)tm_hard_limit(&tmgr));
+    fflush(stdout);
+}
+
+static int root_is_tactical(Board* b, Move* list, int n) {
+    if (is_in_check(b, b->side))
+        return 1;
+    if (n <= 6)
+        return 1;
+    int captures = 0;
+    for (int i = 0; i < n; i++)
+        if (is_capture_move(b, list[i]))
+            captures++;
+    return n > 0 && captures * 3 >= n;
+}
+
+Move search_root(Board* b, const SearchLimits* limits) {
+    atomic_store_explicit(&stop_flag, 0, memory_order_relaxed);
+    atomic_store_explicit(&ponder_hit_flag, 0, memory_order_relaxed);
+    tm_init(&tmgr, limits, b->side);
     reset_ordering_heuristics();
     tt_new_search();
 
     Move list[256];
-    int n = gen_moves(b, list);
+    int generated = gen_moves(b, list);
+    int n = 0;
+    for (int i = 0; i < generated; i++)
+        if (root_move_allowed(limits, list[i]))
+            list[n++] = list[i];
+    tm_set_tactical_root(&tmgr, root_is_tactical(b, list, n));
+
     Move tt_move = {0, 0, 0};
     int have_tt_move = tt_probe_move(b->hash, &tt_move);
     order_moves(b, list, n, have_tt_move ? &tt_move : NULL, 0, NULL);
@@ -737,18 +856,36 @@ Move search_root(Board* b, int depth, int movetime_ms) {
             unmake_move(b, list[i], &u);
             bestMove = list[i];
             haveMove = 1;
+            root_pv_len = 1;
+            root_pv[0] = bestMove;
             break;
         }
     }
     if (!haveMove)
         return bestMove;
 
+    /* If the caller gave us essentially no time, return the legal fallback move. */
+    if (tm_hard_limit(&tmgr) == 0)
+        return bestMove;
+
 #define ASPIRATION_WINDOW 30
 
     int prev_score = 0;
     int have_prev_score = 0;
+    int max_depth = limits->depth > 0 ? limits->depth : 64;
 
-    for (int d = 1; d <= depth; d++) {
+    for (int d = 1; d <= max_depth; d++) {
+        if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
+            break;
+
+        /* Skip iterations we predict cannot finish: starting one anyway
+         * would only waste the time spent on it, since an aborted
+         * iteration's result is discarded below. */
+        if (!tm_should_start_iteration(&tmgr, d))
+            break;
+
+        tm_begin_iteration(&tmgr);
+
         int alpha, beta;
         int delta = ASPIRATION_WINDOW;
         if (have_prev_score && d > 1) {
@@ -759,18 +896,28 @@ Move search_root(Board* b, int depth, int movetime_ms) {
             beta = INF;
         }
 
-        int iterBestScore;
-        Move iterBestMove;
-        int iterHave;
+        int iterBestScore = -INF;
+        Move iterBestMove = (Move){0, 0, 0};
+        int iterHave = 0;
+        int64_t pass_start_ms = tm_elapsed_ms(&tmgr);
 
         for (;;) {
+            if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
+                break;
+
             iterBestScore = -INF;
             iterBestMove = (Move){0, 0, 0};
             iterHave = 0;
-
             int search_alpha = alpha;
 
             for (int i = 0; i < n; i++) {
+                if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
+                    break;
+                if (tm_hard_expired_now(&tmgr)) {
+                    atomic_store_explicit(&stop_flag, 1, memory_order_relaxed);
+                    break;
+                }
+
                 if (same_move(list[i], bestMove)) {
                     Move tmp = list[0];
                     list[0] = list[i];
@@ -781,7 +928,7 @@ Move search_root(Board* b, int depth, int movetime_ms) {
 
             int move_num = 0;
             for (int i = 0; i < n; i++) {
-                if (stop_flag && d > 1)
+                if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
                     break;
                 Undo u;
                 if (!make_move(b, list[i], &u))
@@ -793,12 +940,12 @@ Move search_root(Board* b, int depth, int movetime_ms) {
                     score = -negamax(b, d - 1, -beta, -search_alpha, 1, 1, list[i]);
                 } else {
                     score = -negamax(b, d - 1, -search_alpha - 1, -search_alpha, 1, 1, list[i]);
-                    if (score > search_alpha && score < beta)
+                    if (!atomic_load_explicit(&stop_flag, memory_order_relaxed) && score > search_alpha && score < beta)
                         score = -negamax(b, d - 1, -beta, -search_alpha, 1, 1, list[i]);
                 }
 
                 unmake_move(b, list[i], &u);
-                if (stop_flag && d > 1)
+                if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
                     break;
                 if (score > iterBestScore) {
                     iterBestScore = score;
@@ -809,43 +956,56 @@ Move search_root(Board* b, int depth, int movetime_ms) {
                     search_alpha = score;
             }
 
-            if (stop_flag && d > 1)
-                break;
-            if (!iterHave)
+            if (atomic_load_explicit(&stop_flag, memory_order_relaxed) || !iterHave)
                 break;
 
             if (iterBestScore <= alpha) {
+                tm_notify_aspiration_fail(&tmgr, 0);
+                int64_t now_ms_elapsed = tm_elapsed_ms(&tmgr);
+                tm_notify_aspiration_research(&tmgr, now_ms_elapsed - pass_start_ms);
+                pass_start_ms = now_ms_elapsed;
                 alpha -= delta;
-                if (alpha < -INF)
-                    alpha = -INF;
+                if (alpha < -INF) alpha = -INF;
                 delta *= 2;
                 continue;
             }
             if (iterBestScore >= beta) {
+                tm_notify_aspiration_fail(&tmgr, 1);
+                int64_t now_ms_elapsed = tm_elapsed_ms(&tmgr);
+                tm_notify_aspiration_research(&tmgr, now_ms_elapsed - pass_start_ms);
+                pass_start_ms = now_ms_elapsed;
                 beta += delta;
-                if (beta > INF)
-                    beta = INF;
+                if (beta > INF) beta = INF;
                 delta *= 2;
                 continue;
             }
-
             break;
         }
 
+        if (atomic_load_explicit(&stop_flag, memory_order_relaxed))
+            break;
+
         if (iterHave) {
+            int best_changed = !same_move(bestMove, iterBestMove);
             bestMove = iterBestMove;
             haveMove = 1;
+            build_root_pv(bestMove);
+
+            int mate_distance = mate_distance_from_score(iterBestScore);
+            tm_iteration_feedback(&tmgr, d, iterBestScore, best_changed, mate_distance);
             prev_score = iterBestScore;
             have_prev_score = 1;
-            printf("info depth %d score cp %d\n", d, iterBestScore);
-            fflush(stdout);
-            if (!stop_flag)
-                tt_store(b->hash, d, 0, iterBestScore, TT_EXACT, iterBestMove);
+
+            tt_store(b->hash, d, 0, iterBestScore, TT_EXACT, iterBestMove);
+            print_search_info(d, iterBestScore);
         }
 
-        if (stop_flag)
+        /* A completed iteration is always usable. Stop early when the soft budget
+         * has expired; the hard deadline remains a safety net for unstable searches. */
+        if (tm_soft_expired(&tmgr))
             break;
     }
 
+    (void)haveMove;
     return bestMove;
 }
