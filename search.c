@@ -37,7 +37,7 @@ static void check_time(void) {
         stop_flag = 1;
 }
 
-static const int pawn_pst[64] = {
+static const int mg_pawn_pst[64] = {
     // clang-format off
      0,   0,   0,   0,   0,   0,   0,   0,
     50,  50,  50,  50,  50,  50,  50,  50,
@@ -50,7 +50,7 @@ static const int pawn_pst[64] = {
     // clang-format on
 };
 
-static const int knight_pst[64] = {
+static const int mg_knight_pst[64] = {
     // clang-format off
     -50, -40, -30, -30, -30, -30, -40, -50,
     -40, -20,   0,   0,   0,   0, -20, -40,
@@ -63,7 +63,7 @@ static const int knight_pst[64] = {
     // clang-format on
 };
 
-static const int bishop_pst[64] = {
+static const int mg_bishop_pst[64] = {
     // clang-format off
     -20, -10, -10, -10, -10, -10, -10, -20,
     -10,   0,   0,   0,   0,   0,   0, -10,
@@ -76,7 +76,7 @@ static const int bishop_pst[64] = {
     // clang-format on
 };
 
-static const int rook_pst[64] = {
+static const int mg_rook_pst[64] = {
     // clang-format off
       0,  0,  0,  0,  0,  0,  0,  0,
       5, 10, 10, 10, 10, 10, 10,  5,
@@ -89,7 +89,7 @@ static const int rook_pst[64] = {
     // clang-format on
 };
 
-static const int queen_pst[64] = {
+static const int mg_queen_pst[64] = {
     // clang-format off
     -20, -10, -10,  -5,  -5, -10, -10, -20,
     -10,   0,   0,   0,   0,   0,   0, -10,
@@ -102,7 +102,7 @@ static const int queen_pst[64] = {
     // clang-format on
 };
 
-static const int king_pst[64] = {
+static const int mg_king_pst[64] = {
     // clang-format off
     -30, -40, -40, -50, -50, -40, -40, -30,
     -30, -40, -40, -50, -50, -40, -40, -30,
@@ -115,27 +115,123 @@ static const int king_pst[64] = {
     // clang-format on
 };
 
-static const int* pst_table_for(int type) {
+static const int eg_pawn_pst[64] = {
+    // clang-format off
+      0,   0,   0,   0,   0,   0,   0,   0,
+     80,  80,  80,  80,  80,  80,  80,  80,
+     50,  50,  50,  50,  50,  50,  50,  50,
+     30,  30,  30,  30,  30,  30,  30,  30,
+     20,  20,  20,  20,  20,  20,  20,  20,
+     10,  10,  10,  10,  10,  10,  10,  10,
+     10,  10,  10,  10,  10,  10,  10,  10,
+      0,   0,   0,   0,   0,   0,   0,   0,
+    // clang-format on
+};
+
+static const int eg_knight_pst[64] = {
+    // clang-format off
+    -50, -40, -30, -30, -30, -30, -40, -50,
+    -40, -20,   0,   5,   5,   0, -20, -40,
+    -30,   0,  15,  20,  20,  15,   0, -30,
+    -30,   5,  20,  25,  25,  20,   5, -30,
+    -30,   5,  20,  25,  25,  20,   5, -30,
+    -30,   0,  15,  20,  20,  15,   0, -30,
+    -40, -20,   0,   5,   5,   0, -20, -40,
+    -50, -40, -30, -30, -30, -30, -40, -50,
+    // clang-format on
+};
+
+static const int eg_bishop_pst[64] = {
+    // clang-format off
+    -20, -10, -10, -10, -10, -10, -10, -20,
+    -10,   0,   5,   5,   5,   5,   0, -10,
+    -10,   5,  10,  15,  15,  10,   5, -10,
+    -10,   5,  15,  20,  20,  15,   5, -10,
+    -10,   5,  15,  20,  20,  15,   5, -10,
+    -10,   5,  10,  15,  15,  10,   5, -10,
+    -10,   0,   5,   5,   5,   5,   0, -10,
+    -20, -10, -10, -10, -10, -10, -10, -20,
+    // clang-format on
+};
+
+static const int eg_rook_pst[64] = {
+    // clang-format off
+      0,   0,   5,  10,  10,   5,   0,   0,
+      5,  10,  10,  15,  15,  10,  10,   5,
+      0,   5,   5,  10,  10,   5,   5,   0,
+      0,   0,   0,   5,   5,   0,   0,   0,
+      0,   0,   0,   5,   5,   0,   0,   0,
+      0,   5,   5,  10,  10,   5,   5,   0,
+      5,  10,  10,  15,  15,  10,  10,   5,
+      0,   0,   5,  10,  10,   5,   0,   0,
+    // clang-format on
+};
+
+static const int eg_queen_pst[64] = {
+    // clang-format off
+    -20, -10, -10,  -5,  -5, -10, -10, -20,
+    -10,   0,   5,   5,   5,   5,   0, -10,
+    -10,   5,  10,  15,  15,  10,   5, -10,
+     -5,   5,  15,  20,  20,  15,   5,  -5,
+     -5,   5,  15,  20,  20,  15,   5,  -5,
+    -10,   5,  10,  15,  15,  10,   5, -10,
+    -10,   0,   5,   5,   5,   5,   0, -10,
+    -20, -10, -10,  -5,  -5, -10, -10, -20,
+    // clang-format on
+};
+
+static const int eg_king_pst[64] = {
+    // clang-format off
+    -50, -40, -30, -20, -20, -30, -40, -50,
+    -30, -20, -10,   0,   0, -10, -20, -30,
+    -30, -10,  20,  30,  30,  20, -10, -30,
+    -30, -10,  30,  40,  40,  30, -10, -30,
+    -30, -10,  30,  40,  40,  30, -10, -30,
+    -30, -10,  20,  30,  30,  20, -10, -30,
+    -30, -30,   0,   0,   0,   0, -30, -30,
+    -50, -30, -30, -30, -30, -30, -30, -50,
+    // clang-format on
+};
+
+static const int* mg_pst_table_for(int type) {
     switch (type) {
         case PAWN:
-            return pawn_pst;
+            return mg_pawn_pst;
         case KNIGHT:
-            return knight_pst;
+            return mg_knight_pst;
         case BISHOP:
-            return bishop_pst;
+            return mg_bishop_pst;
         case ROOK:
-            return rook_pst;
+            return mg_rook_pst;
         case QUEEN:
-            return queen_pst;
+            return mg_queen_pst;
         case KING:
-            return king_pst;
+            return mg_king_pst;
         default:
             return NULL;
     }
 }
 
-static int pst_score(int color, int type, int sq) {
-    const int* table = pst_table_for(type);
+static const int* eg_pst_table_for(int type) {
+    switch (type) {
+        case PAWN:
+            return eg_pawn_pst;
+        case KNIGHT:
+            return eg_knight_pst;
+        case BISHOP:
+            return eg_bishop_pst;
+        case ROOK:
+            return eg_rook_pst;
+        case QUEEN:
+            return eg_queen_pst;
+        case KING:
+            return eg_king_pst;
+        default:
+            return NULL;
+    }
+}
+
+static int pst_score(const int* table, int color, int sq) {
     if (!table)
         return 0;
     return (color == WHITE) ? table[sq ^ 56] : -table[sq];
@@ -143,20 +239,42 @@ static int pst_score(int color, int type, int sq) {
 
 static const int piece_material[PIECE_TYPE_NB] = {100, 320, 330, 500, 900, 20000};
 
+static const int phase_weight[PIECE_TYPE_NB] = {0, 1, 1, 2, 4, 0};
+#define MAX_PHASE 24
+
+static int game_phase(const Board* b) {
+    int phase = 0;
+    for (int color = WHITE; color <= BLACK; color++) {
+        for (int type = PAWN; type <= KING; type++)
+            phase += phase_weight[type] * popcount(b->pieces[color][type]);
+    }
+    if (phase > MAX_PHASE)
+        phase = MAX_PHASE;
+    return phase;
+}
+
 int evaluate(Board* b) {
-    int score = 0;
+    int mg_score = 0;
+    int eg_score = 0;
+
     for (int color = WHITE; color <= BLACK; color++) {
         int sign = (color == WHITE) ? 1 : -1;
         for (int type = PAWN; type <= KING; type++) {
             Bitboard bb = b->pieces[color][type];
             while (bb) {
                 int sq = pop_lsb(&bb);
-                score += sign * piece_material[type];
-                score += pst_score(color, type, sq);
+                mg_score += sign * piece_material[type];
+                eg_score += sign * piece_material[type];
+                mg_score += pst_score(mg_pst_table_for(type), color, sq);
+                eg_score += pst_score(eg_pst_table_for(type), color, sq);
             }
         }
     }
-    score += eval_extra(b);
+
+    int phase = game_phase(b);
+    int score = (mg_score * phase + eg_score * (MAX_PHASE - phase)) / MAX_PHASE;
+
+    score += eval_extra(b, phase, MAX_PHASE);
     return score;
 }
 
@@ -280,9 +398,13 @@ static int is_capture_move(const Board* b, Move m) {
 static Move killer_moves[MAX_PLY][2];
 static int history[2][64][64];
 
+static Move counter_move[64][64];
+static const Move NO_MOVE = {0, 0, 0};
+
 static void reset_ordering_heuristics(void) {
     memset(killer_moves, 0, sizeof(killer_moves));
     memset(history, 0, sizeof(history));
+    memset(counter_move, 0, sizeof(counter_move));
 }
 
 static void record_killer(int ply, Move m) {
@@ -305,9 +427,16 @@ static void record_history(int side, Move m, int depth) {
     }
 }
 
-static void on_quiet_cutoff(Board* b, Move m, int depth, int ply) {
+static void record_counter_move(Move prev_move, Move m) {
+    if (prev_move.from == prev_move.to)
+        return;
+    counter_move[prev_move.from][prev_move.to] = m;
+}
+
+static void on_quiet_cutoff(Board* b, Move prev_move, Move m, int depth, int ply) {
     record_killer(ply, m);
     record_history(b->side, m, depth);
+    record_counter_move(prev_move, m);
 }
 
 static int is_killer(int ply, Move m) {
@@ -316,7 +445,7 @@ static int is_killer(int ply, Move m) {
     return same_move(killer_moves[ply][0], m) || same_move(killer_moves[ply][1], m);
 }
 
-static void order_moves(Board* b, Move* list, int n, const Move* tt_move, int ply) {
+static void order_moves(Board* b, Move* list, int n, const Move* tt_move, int ply, const Move* counter_mv) {
     int score[256];
     for (int i = 0; i < n; i++) {
         int is_capture = is_capture_move(b, list[i]);
@@ -333,6 +462,8 @@ static void order_moves(Board* b, Move* list, int n, const Move* tt_move, int pl
             s = 900001;
         } else if (ply >= 0 && ply < MAX_PLY && same_move(list[i], killer_moves[ply][1])) {
             s = 900000;
+        } else if (counter_mv && same_move(list[i], *counter_mv)) {
+            s = 800000;
         } else {
             s = history[b->side][list[i].from][list[i].to];
         }
@@ -375,9 +506,9 @@ static int quiescence(Board* b, int alpha, int beta, int check_ext, int ply) {
     int see_val[256];
     if (in_check) {
         n = gen_moves(b, list);
-        order_moves(b, list, n, NULL, ply);
+        order_moves(b, list, n, NULL, ply, NULL);
     } else {
-        n = gen_captures(b, list);
+        n = gen_capture_moves(b, list);
         for (int i = 0; i < n; i++)
             see_val[i] = see(b, list[i]);
         for (int i = 1; i < n; i++) {
@@ -446,7 +577,16 @@ static int lmr_reduction(int depth, int move_number) {
     return r;
 }
 
-static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_null) {
+#define RFP_MAX_DEPTH 3
+#define RFP_MARGIN_PER_DEPTH 85
+
+#define FUTILITY_MAX_DEPTH 3
+static const int futility_margin[FUTILITY_MAX_DEPTH + 1] = {0, 100, 175, 260};
+
+#define LMP_MAX_DEPTH 3
+static const int lmp_move_threshold[LMP_MAX_DEPTH + 1] = {0, 6, 10, 16};
+
+static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_null, Move prev_move) {
     check_time();
     if (stop_flag)
         return 0;
@@ -455,6 +595,7 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
 
     uint64_t key = b->hash;
     int alpha_orig = alpha;
+    int is_pv_node = (beta - alpha) > 1;
 
     int tt_score;
     if (tt_probe_score(key, depth, ply, alpha, beta, &tt_score))
@@ -462,11 +603,24 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
 
     int in_check = is_in_check(b, b->side);
 
+    int static_eval = 0;
+    int have_static_eval = 0;
+    if (!in_check) {
+        static_eval = evaluate(b) * (b->side == WHITE ? 1 : -1);
+        have_static_eval = 1;
+    }
+
+    if (!is_pv_node && !in_check && ply > 0 && depth <= RFP_MAX_DEPTH && have_static_eval) {
+        int margin = RFP_MARGIN_PER_DEPTH * depth;
+        if (static_eval - margin >= beta)
+            return static_eval - margin;
+    }
+
     if (allow_null && !in_check && depth >= NULL_MOVE_MIN_DEPTH && ply > 0 && has_non_pawn_material(b, b->side)) {
         int R = (depth > 6) ? 3 : 2;
         Undo nu;
         make_null_move(b, &nu);
-        int null_score = -negamax(b, depth - 1 - R, -beta, -beta + 1, ply + 1, 0);
+        int null_score = -negamax(b, depth - 1 - R, -beta, -beta + 1, ply + 1, 0, NO_MOVE);
         unmake_null_move(b, &nu);
         if (!stop_flag && null_score >= beta)
             return beta;
@@ -475,28 +629,46 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
     Move tt_move = {0, 0, 0};
     int have_tt_move = tt_probe_move(key, &tt_move);
 
+    Move counter_mv = NO_MOVE;
+    int have_counter_mv = 0;
+    if (prev_move.from != prev_move.to) {
+        counter_mv = counter_move[prev_move.from][prev_move.to];
+        have_counter_mv = (counter_mv.from != counter_mv.to);
+    }
+
     Move list[256];
     int n = gen_moves(b, list);
-    order_moves(b, list, n, have_tt_move ? &tt_move : NULL, ply);
+    order_moves(b, list, n, have_tt_move ? &tt_move : NULL, ply, have_counter_mv ? &counter_mv : NULL);
     int legal = 0;
     int best = -INF;
     Move best_move = {0, 0, 0};
+    int quiet_tried = 0;
 
     for (int i = 0; i < n; i++) {
         Move mv = list[i];
 
         int is_quiet = !is_capture_move(b, mv) && !mv.promo;
 
+        if (!is_pv_node && !in_check && is_quiet && legal >= 1) {
+            if (depth <= LMP_MAX_DEPTH && quiet_tried >= lmp_move_threshold[depth])
+                continue;
+            if (depth <= FUTILITY_MAX_DEPTH && have_static_eval &&
+                static_eval + futility_margin[depth] <= alpha)
+                continue;
+        }
+
         Undo u;
         if (!make_move(b, mv, &u))
             continue;
         legal++;
+        if (is_quiet)
+            quiet_tried++;
 
         int gives_check = is_in_check(b, b->side);
 
         int score;
         if (legal == 1) {
-            score = -negamax(b, depth - 1, -beta, -alpha, ply + 1, 1);
+            score = -negamax(b, depth - 1, -beta, -alpha, ply + 1, 1, mv);
         } else {
             int reduction = 0;
             if (!in_check && is_quiet && !gives_check) {
@@ -505,11 +677,11 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
                     reduction--;
             }
 
-            score = -negamax(b, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, 1);
+            score = -negamax(b, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, 1, mv);
             if (score > alpha && reduction > 0)
-                score = -negamax(b, depth - 1, -alpha - 1, -alpha, ply + 1, 1);
+                score = -negamax(b, depth - 1, -alpha - 1, -alpha, ply + 1, 1, mv);
             if (score > alpha && score < beta)
-                score = -negamax(b, depth - 1, -beta, -alpha, ply + 1, 1);
+                score = -negamax(b, depth - 1, -beta, -alpha, ply + 1, 1, mv);
         }
 
         unmake_move(b, mv, &u);
@@ -521,7 +693,7 @@ static int negamax(Board* b, int depth, int alpha, int beta, int ply, int allow_
             alpha = score;
         if (alpha >= beta) {
             if (is_quiet)
-                on_quiet_cutoff(b, mv, depth, ply);
+                on_quiet_cutoff(b, prev_move, mv, depth, ply);
             break;
         }
     }
@@ -550,12 +722,13 @@ Move search_root(Board* b, int depth, int movetime_ms) {
     search_start_ms = now_ms();
     time_limit_ms = (movetime_ms > 0) ? movetime_ms : -1;
     reset_ordering_heuristics();
+    tt_new_search();
 
     Move list[256];
     int n = gen_moves(b, list);
     Move tt_move = {0, 0, 0};
     int have_tt_move = tt_probe_move(b->hash, &tt_move);
-    order_moves(b, list, n, have_tt_move ? &tt_move : NULL, 0);
+    order_moves(b, list, n, have_tt_move ? &tt_move : NULL, 0, NULL);
     Move bestMove = {0, 0, 0};
     int haveMove = 0;
     for (int i = 0; i < n; i++) {
@@ -570,55 +743,100 @@ Move search_root(Board* b, int depth, int movetime_ms) {
     if (!haveMove)
         return bestMove;
 
-    for (int d = 1; d <= depth; d++) {
-        int alpha = -INF;
-        int beta = INF;
-        int iterBestScore = -INF;
-        Move iterBestMove = {0, 0, 0};
-        int iterHave = 0;
+#define ASPIRATION_WINDOW 30
 
-        for (int i = 0; i < n; i++) {
-            if (same_move(list[i], bestMove)) {
-                Move tmp = list[0];
-                list[0] = list[i];
-                list[i] = tmp;
-                break;
-            }
+    int prev_score = 0;
+    int have_prev_score = 0;
+
+    for (int d = 1; d <= depth; d++) {
+        int alpha, beta;
+        int delta = ASPIRATION_WINDOW;
+        if (have_prev_score && d > 1) {
+            alpha = prev_score - ASPIRATION_WINDOW;
+            beta = prev_score + ASPIRATION_WINDOW;
+        } else {
+            alpha = -INF;
+            beta = INF;
         }
 
-        int move_num = 0;
-        for (int i = 0; i < n; i++) {
+        int iterBestScore;
+        Move iterBestMove;
+        int iterHave;
+
+        for (;;) {
+            iterBestScore = -INF;
+            iterBestMove = (Move){0, 0, 0};
+            iterHave = 0;
+
+            int search_alpha = alpha;
+
+            for (int i = 0; i < n; i++) {
+                if (same_move(list[i], bestMove)) {
+                    Move tmp = list[0];
+                    list[0] = list[i];
+                    list[i] = tmp;
+                    break;
+                }
+            }
+
+            int move_num = 0;
+            for (int i = 0; i < n; i++) {
+                if (stop_flag && d > 1)
+                    break;
+                Undo u;
+                if (!make_move(b, list[i], &u))
+                    continue;
+                move_num++;
+
+                int score;
+                if (move_num == 1) {
+                    score = -negamax(b, d - 1, -beta, -search_alpha, 1, 1, list[i]);
+                } else {
+                    score = -negamax(b, d - 1, -search_alpha - 1, -search_alpha, 1, 1, list[i]);
+                    if (score > search_alpha && score < beta)
+                        score = -negamax(b, d - 1, -beta, -search_alpha, 1, 1, list[i]);
+                }
+
+                unmake_move(b, list[i], &u);
+                if (stop_flag && d > 1)
+                    break;
+                if (score > iterBestScore) {
+                    iterBestScore = score;
+                    iterBestMove = list[i];
+                    iterHave = 1;
+                }
+                if (score > search_alpha)
+                    search_alpha = score;
+            }
+
             if (stop_flag && d > 1)
                 break;
-            Undo u;
-            if (!make_move(b, list[i], &u))
+            if (!iterHave)
+                break;
+
+            if (iterBestScore <= alpha) {
+                alpha -= delta;
+                if (alpha < -INF)
+                    alpha = -INF;
+                delta *= 2;
                 continue;
-            move_num++;
-
-            int score;
-            if (move_num == 1) {
-                score = -negamax(b, d - 1, -beta, -alpha, 1, 1);
-            } else {
-                score = -negamax(b, d - 1, -alpha - 1, -alpha, 1, 1);
-                if (score > alpha && score < beta)
-                    score = -negamax(b, d - 1, -beta, -alpha, 1, 1);
+            }
+            if (iterBestScore >= beta) {
+                beta += delta;
+                if (beta > INF)
+                    beta = INF;
+                delta *= 2;
+                continue;
             }
 
-            unmake_move(b, list[i], &u);
-            if (stop_flag && d > 1)
-                break;
-            if (score > iterBestScore) {
-                iterBestScore = score;
-                iterBestMove = list[i];
-                iterHave = 1;
-            }
-            if (score > alpha)
-                alpha = score;
+            break;
         }
 
         if (iterHave) {
             bestMove = iterBestMove;
             haveMove = 1;
+            prev_score = iterBestScore;
+            have_prev_score = 1;
             printf("info depth %d score cp %d\n", d, iterBestScore);
             fflush(stdout);
             if (!stop_flag)

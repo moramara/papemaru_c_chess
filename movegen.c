@@ -205,15 +205,113 @@ int gen_moves(Board* b, Move* list) {
     return n;
 }
 
-int gen_captures(Board* b, Move* list) {
-    Move all[256];
-    int n_all = gen_moves(b, all);
+int gen_capture_moves(Board* b, Move* list) {
     int n = 0;
-    for (int i = 0; i < n_all; i++) {
-        int to = all[i].to;
-        if ((b->all & bb_bit(to)) || to == b->enpas || all[i].promo)
-            list[n++] = all[i];
+    int us = b->side;
+    int them = 1 - us;
+    Bitboard enemy = b->occupied[them];
+    Bitboard pawns = b->pieces[us][PAWN];
+
+    if (us == WHITE) {
+        Bitboard capL = (pawns & ~FILE_A) << 7 & enemy;
+        Bitboard capR = (pawns & ~FILE_H) << 9 & enemy;
+        Bitboard pushPromo = (pawns << 8) & ~b->all & RANK_8;
+
+        Bitboard bb = capL;
+        while (bb) {
+            int to = pop_lsb(&bb);
+            n = add_pawn_move(list, n, to - 7, to, (to >= 56));
+        }
+        bb = capR;
+        while (bb) {
+            int to = pop_lsb(&bb);
+            n = add_pawn_move(list, n, to - 9, to, (to >= 56));
+        }
+        bb = pushPromo;
+        while (bb) {
+            int to = pop_lsb(&bb);
+            n = add_pawn_move(list, n, to - 8, to, 1);
+        }
+    } else {
+        Bitboard capL = (pawns & ~FILE_A) >> 9 & enemy;
+        Bitboard capR = (pawns & ~FILE_H) >> 7 & enemy;
+        Bitboard pushPromo = (pawns >> 8) & ~b->all & RANK_1;
+
+        Bitboard bb = capL;
+        while (bb) {
+            int to = pop_lsb(&bb);
+            n = add_pawn_move(list, n, to + 9, to, (to < 8));
+        }
+        bb = capR;
+        while (bb) {
+            int to = pop_lsb(&bb);
+            n = add_pawn_move(list, n, to + 7, to, (to < 8));
+        }
+        bb = pushPromo;
+        while (bb) {
+            int to = pop_lsb(&bb);
+            n = add_pawn_move(list, n, to + 8, to, 1);
+        }
     }
+
+    if (b->enpas != -1) {
+        Bitboard attackers = pawn_attacks[them][b->enpas] & pawns;
+        while (attackers) {
+            int from = pop_lsb(&attackers);
+            n = add_move(list, n, from, b->enpas, 0);
+        }
+    }
+
+    Bitboard knights = b->pieces[us][KNIGHT];
+    while (knights) {
+        int from = pop_lsb(&knights);
+        Bitboard targets = knight_attacks[from] & enemy;
+        while (targets) {
+            int to = pop_lsb(&targets);
+            n = add_move(list, n, from, to, 0);
+        }
+    }
+
+    Bitboard bishops = b->pieces[us][BISHOP];
+    while (bishops) {
+        int from = pop_lsb(&bishops);
+        Bitboard targets = bishop_attacks(from, b->all) & enemy;
+        while (targets) {
+            int to = pop_lsb(&targets);
+            n = add_move(list, n, from, to, 0);
+        }
+    }
+
+    Bitboard rooks = b->pieces[us][ROOK];
+    while (rooks) {
+        int from = pop_lsb(&rooks);
+        Bitboard targets = rook_attacks(from, b->all) & enemy;
+        while (targets) {
+            int to = pop_lsb(&targets);
+            n = add_move(list, n, from, to, 0);
+        }
+    }
+
+    Bitboard queens = b->pieces[us][QUEEN];
+    while (queens) {
+        int from = pop_lsb(&queens);
+        Bitboard targets = (bishop_attacks(from, b->all) | rook_attacks(from, b->all)) & enemy;
+        while (targets) {
+            int to = pop_lsb(&targets);
+            n = add_move(list, n, from, to, 0);
+        }
+    }
+
+    Bitboard kingbb = b->pieces[us][KING];
+    if (kingbb) {
+        int from = bb_lsb(kingbb);
+        Bitboard targets = king_attacks[from] & enemy;
+        while (targets) {
+            int to = pop_lsb(&targets);
+            n = add_move(list, n, from, to, 0);
+        }
+    }
+
     return n;
 }
 

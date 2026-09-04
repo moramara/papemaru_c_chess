@@ -19,6 +19,8 @@ void tt_free(void);
 void tt_clear(void);
 size_t tt_size_mb(void);
 
+void tt_new_search(void);
+
 int tt_probe_score(uint64_t key, int depth, int ply, int alpha, int beta, int* out_score);
 int tt_probe_move(uint64_t key, Move* out_move);
 

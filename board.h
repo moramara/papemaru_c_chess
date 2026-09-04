@@ -59,7 +59,7 @@ void board_init(Board* b);
 void board_startpos(Board* b);
 
 int gen_moves(Board* b, Move* list);
-int gen_captures(Board* b, Move* list);
+int gen_capture_moves(Board* b, Move* list);
 
 int make_move(Board* b, Move m, Undo* u);
 
